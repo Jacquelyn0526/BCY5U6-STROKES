@@ -1,0 +1,1 @@
+# BCY5U6-STROKES
