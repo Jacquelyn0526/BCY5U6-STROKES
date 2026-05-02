@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>功夫字 - Memory Master</title>
+    <script src="https://cdn.jsdelivr.net/npm/hanzi-writer@3.5/dist/hanzi-writer.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --kungfu-red: #b71c1c;
+            --kungfu-gold: #ffd700;
+            --jade: #00796b;
+            --parchment: #fdf5e6;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--kungfu-red);
+            font-family: 'ZCOOL KuaiLe', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            touch-action: none; /* Prevents scrolling while writing */
+        }
+
+        /* The UI Container */
+        #game-board {
+            width: 100%;
+            max-width: 500px;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 15px;
+            box-sizing: border-box;
+            border: 10px solid var(--kungfu-gold);
+            background: radial-gradient(circle, #d32f2f, #8e0000);
+        }
+
+        /* Reference Section (The Scroll) */
+        #reference-scroll {
+            background: var(--parchment);
+            border: 4px solid #5d4037;
+            border-radius: 10px;
+            padding: 10px;
+            text-align: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        #pinyin-text {
+            font-size: 1.8rem;
+            color: #d32f2f;
+            margin: 0;
+        }
+
+        #word-ref {
+            font-size: 3rem;
+            letter-spacing: 10px;
+            color: #212121;
+            margin: 5px 0;
+        }
+
+        /* Writing Dojo (The Blank Area) */
+        #writing-dojo {
+            background: white;
+            border: 8px solid var(--jade);
+            border-radius: 15px;
+            position: relative;
+            margin: 10px auto;
+            cursor: crosshair;
+        }
+
+        /* Score & Feedback */
+        #feedback-area {
+            text-align: center;
+            color: var(--kungfu-gold);
+        }
+
+        .status-msg {
+            font-size: 1.4rem;
+            height: 30px;
+            margin-bottom: 10px;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            padding-bottom: 10px;
+        }
+
+        button {
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            background: var(--kungfu-gold);
+            border: none;
+            border-bottom: 4px solid #b8860b;
+            border-radius: 30px;
+            font-family: inherit;
+            color: #5d4037;
+            font-weight: bold;
+        }
+
+        button:active {
+            transform: translateY(2px);
+            border-bottom: 1px solid #b8860b;
+        }
+
+        #level-indicator {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0,0,0,0.5);
+            padding: 5px 10px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-board">
+    <div id="level-indicator">Master Level: <span id="lvl">1</span>/14</div>
+
+    <div id="reference-scroll">
+        <p id="pinyin-text"></p>
+        <div id="word-ref"></div>
+        <div style="font-size: 0.8rem; color: #795548;">LOOK AT THE WORD THEN WRITE BELOW</div>
+    </div>
+
+    <div id="writing-dojo">
+        <div id="hanzi-target"></div>
+    </div>
+
+    <div id="feedback-area">
+        <div id="status" class="status-msg">Welcome, Young Master!</div>
+        <div class="btn-group">
+            <button onclick="playAudio()">🔊 Hear</button>
+            <button onclick="restartChar()" style="background: #cfd8dc; border-bottom-color: #90a4ae;">Reset</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const wordList = [
+        {word: "手舞足蹈", pinyin: "shǒu wǔ zú dǎo"},
+        {word: "逊色", pinyin: "xùn sè"},
+        {word: "分辨", pinyin: "fēn biàn"},
+        {word: "腻", pinyin: "nì"},
+        {word: "彼此", pinyin: "bǐ cǐ"},
+        {word: "酬劳", pinyin: "chóu láo"},
+        {word: "辜负", pinyin: "gū fù"},
+        {word: "咳嗽", pinyin: "ké sou"},
+        {word: "碧绿", pinyin: "bì lǜ"},
+        {word: "电线杆", pinyin: "diàn xiàn gān"},
+        {word: "竟", pinyin: "jìng"},
+        {word: "摔", pinyin: "shuāi"},
+        {word: "捣蛋", pinyin: "dǎo dàn"},
+        {word: "扫帚", pinyin: "sào zhǒu"}
+    ];
+
+    let currentWordIdx = 0;
+    let currentCharIdx = 0;
+    let audioCount = 0;
+    let writer;
+
+    function initLevel() {
+        const data = wordList[currentWordIdx];
+        const targetChar = data.word[currentCharIdx];
+        
+        // Update UI
+        document.getElementById('lvl').innerText = (currentWordIdx + 1);
+        document.getElementById('pinyin-text').innerText = data.pinyin;
+        document.getElementById('word-ref').innerText = data.word;
+        
+        // Clear canvas
+        document.getElementById('hanzi-target').innerHTML = '';
+        
+        // Setup Writer - NO TRACING
+        writer = HanziWriter.create('hanzi-target', targetChar, {
+            width: 300,
+            height: 300,
+            padding: 20,
+            showOutline: false,       // CRITICAL: No ghost lines
+            showCharacter: false,     // CRITICAL: Blank canvas
+            strokeColor: '#00796b',   // Jade stroke
+            strokeAnimationSpeed: 1,
+            highlightColor: '#ffd700'
+        });
+
+        // Start the Quiz mode immediately
+        writer.quiz({
+            onMistake: (strokeData) => {
+                updateStatus("Incorrect stroke. Observe the scroll!", "#ffccbc");
+            },
+            onCorrectStroke: () => {
+                updateStatus("Focus... Excellent!", "#b2dfdb");
+            },
+            onComplete: (summary) => {
+                // If they finish, the similarity is high enough
+                handleSuccess();
+            }
+        });
+
+        // Audio Logic
+        audioCount = 0;
+        playAudio();
+    }
+
+    function playAudio() {
+        if (audioCount < 3) {
+            const msg = new SpeechSynthesisUtterance(wordList[currentWordIdx].word);
+            msg.lang = 'zh-CN';
+            msg.rate = 0.8;
+            window.speechSynthesis.speak(msg);
+            audioCount++;
+        } else {
+            updateStatus("Listen carefully to your inner master (Limit 3).", "white");
+        }
+    }
+
+    function updateStatus(txt, bgColor) {
+        const s = document.getElementById('status');
+        s.innerText = txt;
+        if (bgColor) s.style.textShadow = `1px 1px 5px ${bgColor}`;
+    }
+
+    function handleSuccess() {
+        const word = wordList[currentWordIdx].word;
+        updateStatus("MASTERED!", "#ffd700");
+
+        setTimeout(() => {
+            if (currentCharIdx < word.length - 1) {
+                currentCharIdx++;
+                initLevel();
+            } else {
+                currentWordIdx++;
+                currentCharIdx = 0;
+                if (currentWordIdx < wordList.length) {
+                    initLevel();
+                } else {
+                    document.body.innerHTML = `
+                        <div style="color:gold; text-align:center; padding-top:100px;">
+                            <h1>🏆 GRANDMASTER 🏆</h1>
+                            <p>You have conquered the characters!</p>
+                            <button onclick="location.reload()">Train Again</button>
+                        </div>`;
+                }
+            }
+        }, 1000);
+    }
+
+    function restartChar() {
+        initLevel();
+    }
+
+    // Launch
+    window.onload = initLevel;
+</script>
+
+</body>
+</html>
